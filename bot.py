@@ -1,51 +1,59 @@
 import asyncio
 import aiohttp
-import json
 from pyrogram import Client, filters, enums
 
-# ------------------------------------------------------------------
-# CONFIGURATION
-# Paste your credentials here inside the quotes
-# ------------------------------------------------------------------
+# --- CONFIGURATION ---
 API_ID = 26788480  
 API_HASH = "858d65155253af8632221240c535c314"
 BOT_TOKEN = "7810310232:AAFQTXco4XhiB1oZrS9fcsxgxPpdYd8s0eA"
 
-# OpenRouter Configuration
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 MODEL_NAME = "nvidia/nemotron-3-nano-30b-a3b:free"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ------------------------------------------------------------------
-# BOT SETUP
-# ------------------------------------------------------------------
+# --- BOT SETUP ---
+app = Client("pro_dev_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Initialize the Pyrogram Client
-app = Client(
-    "pro_dev_bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-    bot_token=BOT_TOKEN
-)
-
-# System instruction to define the "Super Pro Developer" persona
 SYSTEM_PROMPT = (
-    "You are a Super Pro Developer and Expert Programmer AI. "
-    "You possess deep knowledge of software engineering, algorithms, system design, and modern tech stacks. "
-    "Your answers are precise, high-quality, and follow best practices. "
-    "When providing code, ensure it is clean, efficient, and well-commented. "
-    "Avoid verbose fluff; focus on technical accuracy and solving the user's problem."
+    "You are a Super Pro Developer AI. Provide expert-level, efficient code and technical advice. "
+    "Be direct and precise."
 )
+
+def split_text(text, limit=4000):
+    """
+    Splits a long string into chunks without breaking words or code blocks where possible.
+    """
+    if len(text) <= limit:
+        return [text]
+    
+    chunks = []
+    while text:
+        if len(text) <= limit:
+            chunks.append(text)
+            break
+        
+        # Try to find the last newline within the limit to keep formatting clean
+        split_at = text.rfind("\n", 0, limit)
+        
+        # If no newline, try to find the last space
+        if split_at == -1:
+            split_at = text.rfind(" ", 0, limit)
+            
+        # If still no space, just hard cut at the limit
+        if split_at == -1:
+            split_at = limit
+            
+        chunks.append(text[:split_at].strip())
+        text = text[split_at:].strip()
+        
+    return chunks
 
 async def get_ai_response(user_message):
-    """
-    Sends the user message to OpenRouter and retrieves the AI's response.
-    """
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://telegram.org", # Required by OpenRouter for ranking
-        "X-Title": "ProDevTelegramBot"
+        "HTTP-Referer": "https://github.com/KAC-CHAN/unsen",
+        "X-Title": "ProDevBot"
     }
 
     payload = {
@@ -53,10 +61,7 @@ async def get_ai_response(user_message):
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_message}
-        ],
-        "temperature": 0.7, # Adjust for creativity vs precision
-        "top_p": 1,
-        "repetition_penalty": 1.1
+        ]
     }
 
     async with aiohttp.ClientSession() as session:
@@ -64,39 +69,35 @@ async def get_ai_response(user_message):
             async with session.post(OPENROUTER_URL, headers=headers, json=payload) as response:
                 if response.status == 200:
                     data = await response.json()
-                    # Extract the content from the response
                     return data['choices'][0]['message']['content']
+                elif response.status == 429:
+                    return "⚠️ Error: The AI is rate-limited. Please wait a moment."
                 else:
-                    error_text = await response.text()
-                    print(f"API Error: {error_text}")
-                    return f"⚠️ Error from AI Provider: {response.status}"
+                    return f"⚠️ API Error: {response.status}"
         except Exception as e:
-            print(f"Connection Error: {e}")
-            return "⚠️ A connection error occurred while contacting the AI."
+            return f"⚠️ Connection Failed: {str(e)}"
 
 @app.on_message(filters.text & filters.private)
 async def handle_message(client, message):
-    """
-    Handles incoming text messages from private chats.
-    """
     user_text = message.text
+    await client.send_chat_action(message.chat.id, enums.ChatAction.TYPING)
 
-    # Send a "Typing..." action so the user knows the bot is thinking
-    await client.send_chat_action(chat_id=message.chat.id, action=enums.ChatAction.TYPING)
-
-    # Get response from OpenRouter
     ai_reply = await get_ai_response(user_text)
+    
+    # SPLIT THE MESSAGE BEFORE SENDING
+    parts = split_text(ai_reply)
 
-    # Reply to the user (using Markdown parsing for code blocks)
-    try:
-        await message.reply_text(ai_reply)
-    except Exception as e:
-        # Fallback if markdown parsing fails due to unclosed tags
-        await message.reply_text(ai_reply, quote=True, parse_mode=enums.ParseMode.DISABLED)
+    for part in parts:
+        try:
+            # Try sending with Markdown
+            await message.reply_text(part, parse_mode=enums.ParseMode.MARKDOWN)
+        except Exception:
+            # Fallback to plain text if Markdown is broken (e.g. unclosed backticks)
+            await message.reply_text(part, parse_mode=enums.ParseMode.DISABLED)
+        
+        # Short delay between parts to avoid Telegram's flood limits
+        await asyncio.sleep(0.5)
 
-# ------------------------------------------------------------------
-# RUN THE BOT
-# ------------------------------------------------------------------
 if __name__ == "__main__":
-    print("🤖 Super Pro Developer Bot is starting...")
+    print("🤖 Bot is active. Handling long messages enabled.")
     app.run()
