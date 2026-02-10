@@ -11,7 +11,7 @@ BOT_TOKEN = "7810310232:AAFQTXco4XhiB1oZrS9fcsxgxPpdYd8s0eA"
 
 OPENROUTER_API_KEY = "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"
 MODEL_NAME = "nvidia/nemotron-3-nano-30b-a3b:free"
-OPENROUTER_URL = "[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 app = Client("pro_dev_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
