@@ -12,7 +12,7 @@ API_HASH = "858d65155253af8632221240c535c314"
 BOT_TOKEN = "7810310232:AAFQTXco4XhiB1oZrS9fcsxgxPpdYd8s0eA"
 
 # OpenRouter Configuration
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 MODEL_NAME = "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
