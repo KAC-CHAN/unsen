@@ -1,5 +1,7 @@
 import asyncio
 import aiohttp
+import io
+import re
 from pyrogram import Client, filters, enums
 
 # --- CONFIGURATION ---
@@ -9,53 +11,21 @@ BOT_TOKEN = "7810310232:AAFQTXco4XhiB1oZrS9fcsxgxPpdYd8s0eA"
 
 OPENROUTER_API_KEY = "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"
 MODEL_NAME = "nvidia/nemotron-3-nano-30b-a3b:free"
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_URL = "[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)"
 
-# --- BOT SETUP ---
 app = Client("pro_dev_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 SYSTEM_PROMPT = (
-    "You are a Super Pro Developer AI. Provide expert-level, efficient code and technical advice. "
-    "Be direct and precise."
+    "You are a Super Pro Developer AI. Provide expert-level code. "
+    "Always wrap code in backticks like this: ```python code here ```."
 )
-
-def split_text(text, limit=4000):
-    """
-    Splits a long string into chunks without breaking words or code blocks where possible.
-    """
-    if len(text) <= limit:
-        return [text]
-    
-    chunks = []
-    while text:
-        if len(text) <= limit:
-            chunks.append(text)
-            break
-        
-        # Try to find the last newline within the limit to keep formatting clean
-        split_at = text.rfind("\n", 0, limit)
-        
-        # If no newline, try to find the last space
-        if split_at == -1:
-            split_at = text.rfind(" ", 0, limit)
-            
-        # If still no space, just hard cut at the limit
-        if split_at == -1:
-            split_at = limit
-            
-        chunks.append(text[:split_at].strip())
-        text = text[split_at:].strip()
-        
-    return chunks
 
 async def get_ai_response(user_message):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/KAC-CHAN/unsen",
-        "X-Title": "ProDevBot"
+        "HTTP-Referer": "[https://github.com/KAC-CHAN/unsen](https://github.com/KAC-CHAN/unsen)"
     }
-
     payload = {
         "model": MODEL_NAME,
         "messages": [
@@ -63,41 +33,38 @@ async def get_ai_response(user_message):
             {"role": "user", "content": user_message}
         ]
     }
-
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(OPENROUTER_URL, headers=headers, json=payload) as response:
                 if response.status == 200:
                     data = await response.json()
                     return data['choices'][0]['message']['content']
-                elif response.status == 429:
-                    return "⚠️ Error: The AI is rate-limited. Please wait a moment."
-                else:
-                    return f"⚠️ API Error: {response.status}"
+                return f"⚠️ API Error: {response.status}"
         except Exception as e:
             return f"⚠️ Connection Failed: {str(e)}"
 
 @app.on_message(filters.text & filters.private)
 async def handle_message(client, message):
-    user_text = message.text
     await client.send_chat_action(message.chat.id, enums.ChatAction.TYPING)
+    ai_reply = await get_ai_response(message.text)
 
-    ai_reply = await get_ai_response(user_text)
-    
-    # SPLIT THE MESSAGE BEFORE SENDING
-    parts = split_text(ai_reply)
-
-    for part in parts:
-        try:
-            # Try sending with Markdown
-            await message.reply_text(part, parse_mode=enums.ParseMode.MARKDOWN)
-        except Exception:
-            # Fallback to plain text if Markdown is broken (e.g. unclosed backticks)
-            await message.reply_text(part, parse_mode=enums.ParseMode.DISABLED)
+    # 1. Check if response is very long (> 3000 chars) OR contains code blocks
+    if len(ai_reply) > 3000 or "```" in ai_reply:
+        # Create an in-memory file to avoid saving to disk
+        doc = io.BytesIO(ai_reply.encode())
+        doc.name = "ai_response.txt"
         
-        # Short delay between parts to avoid Telegram's flood limits
-        await asyncio.sleep(0.5)
+        caption = "📄 **Response generated!**\nThe output was too long or contained code, so I've sent it as a file to preserve formatting."
+        
+        await message.reply_document(
+            document=doc,
+            caption=caption,
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+    else:
+        # 2. For short text-only replies, send as normal message
+        await message.reply_text(ai_reply, parse_mode=enums.ParseMode.MARKDOWN)
 
 if __name__ == "__main__":
-    print("🤖 Bot is active. Handling long messages enabled.")
+    print("🤖 Bot started. Long responses will be sent as files.")
     app.run()
